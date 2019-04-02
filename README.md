@@ -1,4 +1,4 @@
-# README
+# cs-255-llvm-pass-skeleton
 The given code is a skeleton of a llvm pass using llvm-8 on cycle machine.
 
 ## Prepration
@@ -22,10 +22,19 @@ make
 ```
 
 3. Use your pass
-```
-clang -Xclang -load -Xclang build/skeleton/libSkeletonPass.so test.cpp
-```
+- One liner: `clang -Xclang -load -Xclang build/skeleton/libSkeletonPass.so test.cpp`
+- Inside the `test/Makefile`, you can find out the way that use `opt` to
+use your own pass.
+
+## Hints
+1. To do dependence testing, your first step is to find loops in the program.
+	- Check how to use other llvm pass in your own pass
+	- http://llvm.org/doxygen/classllvm_1_1Loop.html
+	- https://llvm.org/doxygen/classllvm_1_1LoopInfo.html
+
+2. Get induction variables in the loops you found.
+	- TODO
 
 ## Reference
-https://www.cs.cornell.edu/~asampson/blog/clangpass.html
-https://github.com/abenkhadra/llvm-pass-tutorial
+- https://www.cs.cornell.edu/~asampson/blog/clangpass.html
+- https://github.com/abenkhadra/llvm-pass-tutorial
