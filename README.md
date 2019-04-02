@@ -33,7 +33,8 @@ use your own pass.
 	- https://llvm.org/doxygen/classllvm_1_1LoopInfo.html
 
 2. Get induction variables in the loops you found.
-	- TODO
+	- Check how to use ScalarEvolution pass and how other llvm pass like indvars (Induction Variable Simplify) use it
+	- http://llvm.org/doxygen/classllvm_1_1ScalarEvolution.html#a30bd18ac905eacf3601bc6a553a9ff49
 
 ## Reference
 - https://www.cs.cornell.edu/~asampson/blog/clangpass.html
