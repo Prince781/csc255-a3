@@ -16,7 +16,7 @@ DIS= $(LLVM_BIN_DIR)/llvm-dis
 all: check
 
 check: test.c
-	$(CC) -O0 -c -emit-llvm test.c -o test.bc
+	$(CC) -O0 -Xclang -disable-O0-optnone -c -emit-llvm test.c -o test.bc
 	$(OPT) -load $(LEVEL)/build/skeleton/libSkeletonPass.so -a3 --debug-pass=Structure < test.bc > test.bc.opt
 	$(LLC) -filetype=obj test.bc.opt -o test.o
 	$(CC) test.o -o test
