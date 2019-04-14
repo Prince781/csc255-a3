@@ -63,6 +63,21 @@ namespace {
             printIVs(SL, SE, prefix + " ");
     }
 
+    void printSCEVRec(const SCEV *E) {
+        if (isa<SCEVAddRecExpr>(E)) {
+            const SCEVAddRecExpr *RE = dyn_cast<SCEVAddRecExpr>(E);
+            errs() << "  loop:";
+            RE->getLoop()->print(errs());
+            errs() << "\r\n";
+            errs() << "  loop (start): ";
+            if (isa<SCEVAddRecExpr>(RE->getStart())) {
+                dyn_cast<SCEVAddRecExpr>(RE->getStart())->getLoop()->print(errs());
+            }
+            errs() << "\r\n";
+        } else
+            errs() << "  (no loop for SCEV)\r\n";
+    }
+
     bool runOnFunction(Function &F) override {
       DominatorTree DT(F);
       LoopInfo LI(DT);
@@ -93,8 +108,10 @@ namespace {
                 
                 llvm::Use &U = *ii;
                 const SCEV *E = SE.getSCEV(U.get());
+                errs() << "  op: ";
                 E->print(errs());
-                errs() << "\r\n";
+                errs() << "\r\n  ";
+                printSCEVRec(E);
                 //errs() << U.get()->getValueID() << " " << U.get()->getName() << "\r\n";
               }
             }
@@ -108,6 +125,7 @@ namespace {
                 const SCEV *E = SE.getSCEV(U.get());
                 E->print(errs());
                 errs() << "\r\n";
+                printSCEVRec(E);
                 //errs() << U.get()->getValueID() << " " << U.get()->getName() << "\r\n";
               }
             }
@@ -121,6 +139,7 @@ namespace {
                 const SCEV *E = SE.getSCEV(U.get());
                 E->print(errs());
                 errs() << "\r\n";
+                printSCEVRec(E);
                 //errs() << U.get()->getValueID() << " " << U.get()->getName() << "\r\n";
               }
             }
