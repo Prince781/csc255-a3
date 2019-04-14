@@ -19,6 +19,8 @@ namespace {
     A3() : FunctionPass(ID) {
     }
 
+    // getInductionVariable function is from LLVM source code
+    // lib/Transforms/Scalar/LoopInterchange.cpp
     PHINode *getInductionVariable(Loop *L, ScalarEvolution *SE) {
       PHINode *InnerIndexVar = L->getCanonicalInductionVariable();
       if (InnerIndexVar)
