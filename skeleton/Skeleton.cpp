@@ -49,11 +49,16 @@ namespace {
     }
 
     void printIVs(Loop *L, ScalarEvolution *SE, std::string prefix = "") {
-        const PHINode *ivar = getInductionVariable(L, SE);
+        PHINode *ivar = getInductionVariable(L, SE);
         if (!ivar)
             std::cerr << prefix << "no induction variable for " << (std::string) L->getName() << "\n";
         else
             std::cerr << prefix << "found induction variable: " << (std::string) ivar->getName() << "\n";
+            const SCEV *E = SE->getSCEV(ivar);
+            if (E){
+              E->print(errs());
+              errs() << "\r\n";
+            }
         for (Loop *SL : L->getSubLoops())
             printIVs(SL, SE, prefix + " ");
     }
@@ -68,8 +73,65 @@ namespace {
 
       std::cerr << "In function " << (std::string) F.getName() << "...\n";
 
-      for (Loop *L : LI)
+      for (Loop *L : LI){
         printIVs(L, &SE);
+        for (Loop::block_iterator j = L->block_begin(); ; j++){
+          if (j == L->block_end())
+            break;
+          BasicBlock *B = *j;
+          for (BasicBlock::iterator k = B->begin(); ; k++){
+            if (k == B->end())
+              break;
+            Instruction &I = *k;
+            //errs() << I.getOpcodeName() << "  " << I.getOpcode() << "\r\n";
+            if (I.getOpcode() == 33){
+              // ArrayRef
+              errs() << "New getelementptr\r\n";
+              
+              llvm::Use *operands = I.getOperandList();
+              for(Instruction::op_iterator ii = I.op_begin(); ii != I.op_end(); ii++){
+                
+                llvm::Use &U = *ii;
+                const SCEV *E = SE.getSCEV(U.get());
+                E->print(errs());
+                errs() << "\r\n";
+                //errs() << U.get()->getValueID() << " " << U.get()->getName() << "\r\n";
+              }
+            }
+            else if (I.getOpcode() == 32){
+              // Store
+              errs() << "Store\r\n";
+              llvm::Use *operands = I.getOperandList();
+              for(Instruction::op_iterator ii = I.op_begin(); ii != I.op_end(); ii++){
+                
+                llvm::Use &U = *ii;
+                const SCEV *E = SE.getSCEV(U.get());
+                E->print(errs());
+                errs() << "\r\n";
+                //errs() << U.get()->getValueID() << " " << U.get()->getName() << "\r\n";
+              }
+            }
+            else if (I.getOpcode() == 31){
+              // Load
+              errs() << "Load\r\n";
+              llvm::Use *operands = I.getOperandList();
+              for(Instruction::op_iterator ii = I.op_begin(); ii != I.op_end(); ii++){
+                
+                llvm::Use &U = *ii;
+                const SCEV *E = SE.getSCEV(U.get());
+                E->print(errs());
+                errs() << "\r\n";
+                //errs() << U.get()->getValueID() << " " << U.get()->getName() << "\r\n";
+              }
+            }
+            else{
+              // errs() << I.getOpcode() << ": ";
+              // I.print(errs());
+              // errs() << "\r\n";
+            }
+          }
+        }
+      }
       return false;
     }
 
@@ -79,6 +141,7 @@ namespace {
     }
 
     void getAnalysisUsage(AnalysisUsage &AU) const override {
+      AU.addRequired<ScalarEvolutionWrapperPass>();
     }
   };
 }
