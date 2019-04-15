@@ -8,10 +8,14 @@
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Transforms/Scalar/IndVarSimplify.h"
+#include "llvm/Support/CommandLine.h"
 #include <iostream>
+#include <fstream>
 #include <string>
 
 using namespace llvm;
+
+static cl::opt<std::string> OutputFilename("ilpoutput", cl::desc("Output .ilp filename"), cl::value_desc("filename"));
 
 namespace {
   struct A3 : public FunctionPass {
@@ -56,8 +60,19 @@ namespace {
             std::cerr << prefix << "found induction variable: " << (std::string) ivar->getName() << "\n";
             const SCEV *E = SE->getSCEV(ivar);
             if (E){
-              E->print(errs());
+              int64_t start_value = 0;
+              int64_t end_value = 0;
+              if (isa<SCEVNAryExpr>(E)){
+                const SCEVNAryExpr *AE = dyn_cast<SCEVNAryExpr>(E);
+                const SCEVConstant *CE = dyn_cast<SCEVConstant>(AE->getOperand(0));
+                start_value = CE->getValue()->getZExtValue();
+              }
+              const SCEVConstant *EP = dyn_cast<SCEVConstant>(SE->getSCEVAtScope(E, L->getParentLoop()));
+              end_value = EP->getValue()->getZExtValue();
+              EP->print(errs());
               errs() << "\r\n";
+              errs() << "Start value: " << start_value << "\r\n";
+              errs() << "End value: " << end_value << "\r\n";
             }
         for (Loop *SL : L->getSubLoops())
             printIVs(SL, SE, prefix + " ");
@@ -150,6 +165,11 @@ namespace {
             }
           }
         }
+      }
+      std::ofstream Output(OutputFilename.c_str());
+      if (Output.good()){
+        Output << "Placeholder for ilp";
+        Output.close();
       }
       return false;
     }
