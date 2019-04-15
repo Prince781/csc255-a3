@@ -12,7 +12,9 @@ Yufei Du
     - skeleton/CMakeLists.txt: CMake file to generate Makefile (We edited the filename for generated .so file)
     - CMakeLists.txt: CMake file to generate Makefile
     - test/test.c: testing c source file that came with the skeleton code
-    - test/Makefile: Makefile to compile test.c
+    - test/level*.c: additional custom level-N loops test cases we made
+    - test/Makefile: Makefile to compile test.c. We modified it so that it will run all test files. It will also generate .ll file for
+                    human-readable LLVM IR. 
     - OPTARGS: Arguments to pass in to opt
     - Report.txt: This document
 
