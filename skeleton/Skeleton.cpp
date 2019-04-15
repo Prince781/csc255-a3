@@ -67,7 +67,7 @@ namespace {
         const SCEVConstant *CE = dyn_cast<SCEVConstant>(AE->getOperand(0));
         lsso << CE->getValue()->getSExtValue();
       } else{
-        lsso << "u"; // u as an unknown variable. Maybe it should be infinity instead?
+        lower.clear(); // u as an unknown variable. Maybe it should be infinity instead?
       }
 
       const SCEV *EP = SE->getSCEVAtScope(IV, IV->getLoop()->getParentLoop());
@@ -75,7 +75,7 @@ namespace {
         const SCEVConstant *EPP = dyn_cast<SCEVConstant>(EP);
         usso << EPP->getValue()->getSExtValue() - 1;
       } else{
-        usso << "u"; // u as an unknown variable. Maybe it should be infinity instead? 
+        upper.clear(); // u as an unknown variable. Maybe it should be infinity instead? 
       }
     }
 
@@ -459,7 +459,12 @@ namespace {
           std::string lower, upper;
           assert(isa<SCEVAddRecExpr>(pair.second) && "induction variable is not a SCEVAddRecExpr");
           IVgetRange(dyn_cast<SCEVAddRecExpr>(pair.second), &SE, lower, upper);
-          ilp_file << "var " << glpsolName(pair.first) << " >= " << lower << " <= " << upper << " integer;" << std::endl;
+          ilp_file << "var " << glpsolName(pair.first);
+          if (!lower.empty())
+            ilp_file << " >= " << lower;
+          if (!upper.empty())
+            ilp_file << " <= " << upper;
+          ilp_file << " integer;" << std::endl;
         }
 
         // just pick some variable to maximize; we only care whether a solution exists
