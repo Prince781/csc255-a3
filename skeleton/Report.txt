@@ -1,0 +1,31 @@
+CSC 255/455
+A3
+Princeton Ferro
+Yufei Du
+
+- Citations: Some functions were copied from LLVM Project's source code
+    - getInductionVariable(): lib/Transforms/Scalar/LoopInterchange.cpp
+    - FactorOutConstant(): lib/Analysis/ScalarEvolutionExpander.cpp
+
+- File contents
+    - skeleton/Skeleton.cpp: Source file of our Pass
+    - skeleton/CMakeLists.txt: CMake file to generate Makefile (We edited the filename for generated .so file)
+    - CMakeLists.txt: CMake file to generate Makefile
+    - test/test.c: testing c source file that came with the skeleton code
+    - test/Makefile: Makefile to compile test.c
+    - OPTARGS: Arguments to pass in to opt
+    - Report.txt: This document
+
+- Compile instructions (Same with the "Preparation" section of skeleton's README.md)
+    - Add LLVM_HOME to your environment
+    - Use CMake and Make to compile our pass to runtime lib
+        - mkdir build
+        - cd build
+        - cmake ..
+        - make
+
+- Run instructions (same with the instructions in PDF handout except for the filename of .so file. 
+                    Per instructions on Piazza, the filename should be "libilpdep.so" instead of "ilpdep.so")
+    - opt OPTARGS -load=libilpdep.so -ilpdep -ilpoutput=output.ilp input.c
+
+- Other notes and comments
