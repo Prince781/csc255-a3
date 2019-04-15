@@ -23,8 +23,9 @@ static cl::opt<std::string> OutputFilename("ilpoutput", cl::desc("Output .ilp fi
 namespace {
   struct A3 : public FunctionPass {
     static char ID;
+    std::ofstream ilp_file;
 
-    A3() : FunctionPass(ID) {
+    A3() : FunctionPass(ID), ilp_file(OutputFilename) {
     }
 
     // getInductionVariable function is from LLVM source code
@@ -54,6 +55,27 @@ namespace {
         return PhiVar;
       }
       return nullptr;
+    }
+
+    // get the range of an induction variable
+    void IVgetRange(const SCEVAddRecExpr *IV, ScalarEvolution *SE, std::string &lower, std::string &upper) {
+      const SCEVNAryExpr *AE = dyn_cast<SCEVNAryExpr>(IV);
+      raw_string_ostream lsso(lower), usso(upper);
+
+      if (isa<SCEVConstant>(AE->getOperand(0))){
+        const SCEVConstant *CE = dyn_cast<SCEVConstant>(AE->getOperand(0));
+        lsso << CE->getValue()->getSExtValue();
+      } else{
+        lsso << "u"; // u as an unknown variable. Maybe it should be infinity instead?
+      }
+
+      const SCEV *EP = SE->getSCEVAtScope(IV, IV->getLoop()->getParentLoop());
+      if (isa<SCEVConstant>(EP)){
+        const SCEVConstant *EPP = dyn_cast<SCEVConstant>(EP);
+        usso << EPP->getValue()->getSExtValue();
+      } else{
+        usso << "u"; // u as an unknown variable. Maybe it should be infinity instead? 
+      }
     }
 
     void printIVs(Loop *L, ScalarEvolution *SE, std::map<const SCEV *, PHINode *> &ivars, std::string prefix = "") {
@@ -278,128 +300,11 @@ namespace {
       errs() << "\r\n";
     }
 
-    bool runOnFunction2(Function &F) {
-      LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
-      ScalarEvolution &SE = getAnalysis<ScalarEvolutionWrapperPass>().getSE();
-
-      errs() << "In function " << (std::string) F.getName() << "...\n";
-
-      SetVector<Instruction *> loads_stores;
-
-      for (Loop *L : LI){
-        std::map<const SCEV *, PHINode *> ivars_map;
-        printIVs(L, &SE, ivars_map);
-
-        for (Loop::block_iterator j = L->block_begin(); ; j++){
-          if (j == L->block_end())
-            break;
-          BasicBlock *B = *j;
-          for (BasicBlock::iterator k = B->begin(); ; k++){
-            if (k == B->end())
-              break;
-            Instruction *I = &*k;
-            //errs() << I.getOpcodeName() << "  " << I.getOpcode() << "\r\n";
-            if (I->getOpcode() == 33){
-              // ArrayRef
-              errs() << "New getelementptr\r\n";
-              
-              llvm::Use *operands = I->getOperandList();
-              for(Instruction::op_iterator ii = I->op_begin(); ii != I->op_end(); ii++){
-                llvm::Use &U = *ii;
-                const SCEV *E = SE.getSCEV(U.get());
-                errs() << "  op: ";
-                E->print(errs());
-                errs() << "\r\n  ";
-                printSCEVRec(E);
-                //errs() << U.get()->getValueID() << " " << U.get()->getName() << "\r\n";
-              }
-            }
-            else if (I->getOpcode() == 32){
-              // Store
-              errs() << "Store\r\n";
-              llvm::Use *operands = I->getOperandList();
-              for(Instruction::op_iterator ii = I->op_begin(); ii != I->op_end(); ii++){
-                
-                llvm::Use &U = *ii;
-                const SCEV *E = SE.getSCEV(U.get());
-                E->print(errs());
-                errs() << "\r\n";
-                printSCEVRec(E);
-                //errs() << U.get()->getValueID() << " " << U.get()->getName() << "\r\n";
-              }
-              loads_stores.insert(I);
-              SmallVector<GetElementPtrInst *, 4> geps_list;
-              std::set<Instruction *> seen;
-              getGEPs(I, geps_list, seen);
-              errs() << "store instruction depends on these getelementptr instructions:\r\n";
-              for (GetElementPtrInst *inst : geps_list) {
-                inst->print(errs());
-                errs() << "\r\n";
-                errs() << "    with SCEV: ";
-                const SCEV *scev = getGEPThirdArg(inst, &SE);
-                assert(scev && "no SCEV!");
-                scev->print(errs());
-                errs() << "\r\n";
-                errs() << "    turned into an index function (coefficients):";
-                std::list<Coeff> expr_coeffs;
-                const SCEVConstant *expr_const = nullptr;
-                compareToIndVars(scev, &SE, expr_coeffs, expr_const, ivars_map);
-              }
-            }
-            else if (I->getOpcode() == 31){
-              // Load
-              errs() << "Load\r\n";
-              llvm::Use *operands = I->getOperandList();
-              for(Instruction::op_iterator ii = I->op_begin(); ii != I->op_end(); ii++){
-                
-                llvm::Use &U = *ii;
-                const SCEV *E = SE.getSCEV(U.get());
-                E->print(errs());
-                errs() << "\r\n";
-                printSCEVRec(E);
-                //errs() << U.get()->getValueID() << " " << U.get()->getName() << "\r\n";
-              }
-              loads_stores.insert(I);
-              SmallVector<GetElementPtrInst *, 4> geps_list;
-              std::set<Instruction *> seen;
-              getGEPs(I, geps_list, seen);
-              errs() << "load instruction depends on these getelementptr instructions:\r\n";
-              for (GetElementPtrInst *inst : geps_list) {
-                inst->print(errs());
-                errs() << "\r\n";
-                errs() << "    with SCEV: ";
-                const SCEV *scev = getGEPThirdArg(inst, &SE);
-                assert(scev && "no SCEV!");
-                scev->print(errs());
-                errs() << "\r\n";
-                errs() << "    turned into an index function (coefficients):";
-                std::list<Coeff> expr_coeffs;
-                const SCEVConstant *expr_const = nullptr;
-                compareToIndVars(scev, &SE, expr_coeffs, expr_const, ivars_map);
-                errs() << "\r\n";
-              }
-            }
-            else{
-              // errs() << I.getOpcode() << ": ";
-              // I.print(errs());
-              // errs() << "\r\n";
-            }
-          }
-        }
-      }
-      std::ofstream Output(OutputFilename.c_str());
-      if (Output.good()){
-        Output << "Placeholder for ilp";
-        Output.close();
-      }
-      return false;
-    }
-
     struct Equation {
       std::list<Coeff> coeffs;
       const SCEVConstant *cnst;
 
-      std::string to_string(std::map<const SCEV *, PHINode *> &iv_map, std::string post = "") const {
+      std::string to_string(std::map<const SCEV *, PHINode *> &iv_map, std::string post, std::map<std::string, const SCEV *> &ivars_instanced) const {
         std::string s;
         raw_string_ostream stream(s);
 
@@ -410,12 +315,18 @@ namespace {
         for (auto coeff : coeffs) {
           assert(iv_map.find(coeff.indvar) != iv_map.end() && "indvar SCEV doesn't map to an indvar");
           assert(coeff.coeff && "coeff cannot be null");
+          std::string iname;   // instance name
+          raw_string_ostream iname_stream(iname);
+
           if (!first)
             stream << " + ";
           else
             first = false;
           coeff.coeff->print(stream);
-          stream << " " << iv_map[coeff.indvar]->getName() << post;
+          iname_stream << iv_map[coeff.indvar]->getName() << post;
+          iname_stream.flush();
+          stream << "*" << iname;
+          ivars_instanced[iname] = coeff.indvar;
         }
 
         if (cnst) {
@@ -425,6 +336,11 @@ namespace {
         }
 
         return s;
+      }
+
+      std::string to_string(std::map<const SCEV *, PHINode *> &iv_map) const {
+        std::map<std::string, const SCEV *> dummy;
+        return to_string(iv_map, "", dummy);
       }
     };
 
@@ -436,6 +352,8 @@ namespace {
     bool runOnFunction(Function &F) override {
       LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
       ScalarEvolution &SE = getAnalysis<ScalarEvolutionWrapperPass>().getSE();
+
+      ilp_file << "/* " << (std::string) F.getName() << "() */\n";
 
       // (1) for each loop L
       // (2) populate SCEV -> IV map
@@ -453,20 +371,14 @@ namespace {
             Instruction *I = &*bi;
 
             if (isa<LoadInst>(I) || isa<StoreInst>(I)) {
-              const SCEV *base = nullptr; // TODO: get base of load/store
+              const SCEV *base = nullptr;
               SmallVector<GetElementPtrInst *, 4> geps_list;
               std::set<Instruction *> seen;
-
-              if (isa<LoadInst>(I)) {
-                LoadInst *LI = dyn_cast<LoadInst>(I);
-              } else {
-                StoreInst *SI = dyn_cast<StoreInst>(I);
-              }
 
               getGEPs(I, geps_list, seen); // get all getelementptr instructions that this instruction depends on
               for (GetElementPtrInst *gep : geps_list){
                 if (!isa<GetElementPtrInst>(gep->getOperand(0))){
-                  base = SE.getSCEV(gep->getOperand(0));
+                  base = SE.getSCEV(gep->getOperand(0));  // TODO: maybe use llvm::Value instead of SCEV here?
                   break;
                 }
               }
@@ -488,6 +400,10 @@ namespace {
           }
         }
 
+        // the instanced names of the induction variables
+        // for example, if the induction variable is "indvar.iv",
+        // then a possible instance of it would be "indvar.iv_a"
+        std::map<std::string, const SCEV *> ivars_instanced;
         for (auto pair : base_map) {
           // for debugging purposes
           pair.first->print(errs());
@@ -510,7 +426,8 @@ namespace {
           errs() << "writing to ... " << OutputFilename << " for all references to " << pair.first << "\r\n";
 
           // time to print the ILP
-          std::ofstream ilp_file(OutputFilename, std::ofstream::app);
+          std::string eqns;
+          raw_string_ostream eqns_s(eqns);
           for (auto it = pair.second.begin(); it != pair.second.end(); it++) {
             for (auto it2 = std::next(it); it2 != pair.second.end(); it2++) {
               if (!(isa<StoreInst>(it->I) || isa<StoreInst>(it2->I)))
@@ -518,18 +435,30 @@ namespace {
               auto fidx_it = it->idxs.begin();    // f_i()
               auto gidx_it = it2->idxs.begin();   // g_i()
 
-              // TODO: write max ... at head
-
               for (; fidx_it != it->idxs.end() && gidx_it != it2->idxs.end(); fidx_it++,gidx_it++) {
-                ilp_file << fidx_it->to_string(iv_map, "a") << " = " << gidx_it->to_string(iv_map, "B") << ";\n";
+                eqns_s << fidx_it->to_string(iv_map, "a", ivars_instanced) 
+                << " = " << gidx_it->to_string(iv_map, "B", ivars_instanced) << ";\n";
               }
 
               assert(fidx_it == it->idxs.end() && "references to same memory location have different number of index functions");
               assert(gidx_it == it2->idxs.end() && "references to same memory location have different number of index functions");
-
-              // TODO: write constraints on index variables
             }
           }
+          eqns_s.flush();
+
+          auto fpair = &*ivars_instanced.begin();
+          ilp_file << "max: " << fpair->first << ";" << std::endl;
+          ilp_file << eqns;
+        }
+
+        // print ranges for induction variables
+        for (auto pair : ivars_instanced) {
+          std::string lower, upper;
+          assert(isa<SCEVAddRecExpr>(pair.second) && "induction variable is not a SCEVAddRecExpr");
+          IVgetRange(dyn_cast<SCEVAddRecExpr>(pair.second), &SE, lower, upper);
+
+          ilp_file << pair.first << " >= " << lower << ";" << std::endl;
+          ilp_file << pair.first << " < " << upper << ";\n" << std::endl;
         }
       }
       return false;

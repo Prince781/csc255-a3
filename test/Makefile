@@ -17,8 +17,8 @@ all: check
 
 check: test.bc.opt level2.bc.opt level3.bc.opt
 
-%.bc.opt: %.bc $(LEVEL)/build/skeleton/libSkeletonPass.so
-	$(OPT) -load $(LEVEL)/build/skeleton/libSkeletonPass.so -mem2reg -indvars -a3 -ilpoutput=output.ilp --debug-pass=Structure < $< > $@
+%.bc.opt: %.bc $(LEVEL)/build/skeleton/libilpdep.so
+	$(OPT) -load $(LEVEL)/build/skeleton/libilpdep.so -mem2reg -indvars -a3 -ilpoutput=output.ilp --debug-pass=Structure < $< > $@
 	$(DIS) $@
 
 %.bc: %.c
