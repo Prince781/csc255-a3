@@ -55,46 +55,47 @@ namespace {
       return nullptr;
     }
 
-    void printIVs(Loop *L, ScalarEvolution *SE, std::string prefix = "") {
+    void printIVs(Loop *L, ScalarEvolution *SE, std::map<const SCEV *, PHINode *> &ivars, std::string prefix = "") {
         PHINode *ivar = getInductionVariable(L, SE);
         if (!ivar)
             errs() << prefix << "no induction variable for " << (std::string) L->getName() << "\n";
         else
             errs() << prefix << "found induction variable: " << (std::string) ivar->getName() << "\n";
-            const SCEV *E = SE->getSCEV(ivar);
-            if (E){
-              int64_t start_value = 0;
-              int64_t end_value = 0;
-              std::string start_value_str, end_value_str;
-              if (isa<SCEVNAryExpr>(E)){
-                const SCEVNAryExpr *AE = dyn_cast<SCEVNAryExpr>(E);
-                if (isa<SCEVConstant>(AE->getOperand(0))){
-                  const SCEVConstant *CE = dyn_cast<SCEVConstant>(AE->getOperand(0));
-                  start_value = CE->getValue()->getZExtValue();
-                  start_value_str = std::to_string(start_value);
-                } else{
-                  start_value_str = "u"; // u as an unknown variable. Maybe it should be infinity instead?
-                }
-                
-              }
-              // const SCEVConstant *EP = dyn_cast<SCEVConstant>(SE->getSCEVAtScope(E, L->getParentLoop()));
-              // end_value = EP->getValue()->getZExtValue();
-              const SCEV *EP = SE->getSCEVAtScope(E, L->getParentLoop());
-              if (isa<SCEVConstant>(EP)){
-                const SCEVConstant *EPP = dyn_cast<SCEVConstant>(EP);
-                end_value = EPP->getValue()->getZExtValue();
-                end_value_str = std::to_string(end_value);
+          const SCEV *E = SE->getSCEV(ivar);
+          if (E){
+            ivars[E] = ivar;
+            int64_t start_value = 0;
+            int64_t end_value = 0;
+            std::string start_value_str, end_value_str;
+            if (isa<SCEVNAryExpr>(E)){
+              const SCEVNAryExpr *AE = dyn_cast<SCEVNAryExpr>(E);
+              if (isa<SCEVConstant>(AE->getOperand(0))){
+                const SCEVConstant *CE = dyn_cast<SCEVConstant>(AE->getOperand(0));
+                start_value = CE->getValue()->getZExtValue();
+                start_value_str = std::to_string(start_value);
               } else{
-                end_value_str = "u"; // u as an unknown variable. Maybe it should be infinity instead? 
+                start_value_str = "u"; // u as an unknown variable. Maybe it should be infinity instead?
               }
               
-              EP->print(errs());
-              errs() << "\r\n";
-              errs() << "Start value: " << start_value << "\r\n";
-              errs() << "End value: " << end_value << "\r\n";
             }
+            // const SCEVConstant *EP = dyn_cast<SCEVConstant>(SE->getSCEVAtScope(E, L->getParentLoop()));
+            // end_value = EP->getValue()->getZExtValue();
+            const SCEV *EP = SE->getSCEVAtScope(E, L->getParentLoop());
+            if (isa<SCEVConstant>(EP)){
+              const SCEVConstant *EPP = dyn_cast<SCEVConstant>(EP);
+              end_value = EPP->getValue()->getZExtValue();
+              end_value_str = std::to_string(end_value);
+            } else{
+              end_value_str = "u"; // u as an unknown variable. Maybe it should be infinity instead? 
+            }
+            
+            EP->print(errs());
+            errs() << "\r\n";
+            errs() << "Start value: " << start_value << "\r\n";
+            errs() << "End value: " << end_value << "\r\n";
+          }
         for (Loop *SL : L->getSubLoops())
-            printIVs(SL, SE, prefix + " ");
+            printIVs(SL, SE, ivars, prefix + " ");
     }
 
     void printSCEVRec(const SCEV *E) {
@@ -221,7 +222,8 @@ namespace {
       return false;
     }
 
-    void compareToIndVars(const SCEV *offset, ScalarEvolution *SE, std::list<Coeff> &coeffs, const SCEVConstant *&cnst) {
+    void compareToIndVars(const SCEV *offset, ScalarEvolution *SE, std::list<Coeff> &coeffs, const SCEVConstant *&cnst, 
+      std::map<const SCEV *, PHINode *> &ivars_map) {
       while (isa<SCEVAddRecExpr>(offset)) {
         const SCEVAddRecExpr *RE = dyn_cast<SCEVAddRecExpr>(offset);
         // (1) get corresponding induction variable for outermost SCEV
@@ -252,6 +254,27 @@ namespace {
       else
         cnst->print(errs());
       errs() << "\r\n";
+
+
+      printIndexFunction(coeffs, cnst, ivars_map);
+    }
+
+    void printIndexFunction(std::list<Coeff> &coeffs, const SCEVConstant *scnst, std::map<const SCEV *, PHINode *> &ivars_map) {
+      bool first = true;
+      for (auto pair : coeffs) {
+        if (!first)
+          errs() << " + ";
+        else
+          first = false;
+        pair.coeff->print(errs());
+        errs() << "*" << ivars_map[pair.indvar]->getName();
+      }
+      if (scnst) {
+        if (!first)
+          errs() << " + ";
+        scnst->print(errs());
+      }
+      errs() << "\r\n";
     }
 
     bool runOnFunction(Function &F) override {
@@ -267,7 +290,9 @@ namespace {
       SetVector<Instruction *> loads_stores;
 
       for (Loop *L : LI){
-        printIVs(L, &SE);
+        std::map<const SCEV *, PHINode *> ivars_map;
+        printIVs(L, &SE, ivars_map);
+
         for (Loop::block_iterator j = L->block_begin(); ; j++){
           if (j == L->block_end())
             break;
@@ -321,7 +346,7 @@ namespace {
                 errs() << "    turned into an index function (coefficients):";
                 std::list<Coeff> expr_coeffs;
                 const SCEVConstant *expr_const = nullptr;
-                compareToIndVars(scev, &SE, expr_coeffs, expr_const);
+                compareToIndVars(scev, &SE, expr_coeffs, expr_const, ivars_map);
               }
             }
             else if (I->getOpcode() == 31){
@@ -353,7 +378,7 @@ namespace {
                 errs() << "    turned into an index function (coefficients):";
                 std::list<Coeff> expr_coeffs;
                 const SCEVConstant *expr_const = nullptr;
-                compareToIndVars(scev, &SE, expr_coeffs, expr_const);
+                compareToIndVars(scev, &SE, expr_coeffs, expr_const, ivars_map);
                 errs() << "\r\n";
               }
             }
