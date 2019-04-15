@@ -72,7 +72,7 @@ namespace {
               const SCEVNAryExpr *AE = dyn_cast<SCEVNAryExpr>(E);
               if (isa<SCEVConstant>(AE->getOperand(0))){
                 const SCEVConstant *CE = dyn_cast<SCEVConstant>(AE->getOperand(0));
-                start_value = CE->getValue()->getZExtValue();
+                start_value = CE->getValue()->getSExtValue();
                 start_value_str = std::to_string(start_value);
               } else{
                 start_value_str = "u"; // u as an unknown variable. Maybe it should be infinity instead?
@@ -80,11 +80,11 @@ namespace {
               
             }
             // const SCEVConstant *EP = dyn_cast<SCEVConstant>(SE->getSCEVAtScope(E, L->getParentLoop()));
-            // end_value = EP->getValue()->getZExtValue();
+            // end_value = EP->getValue()->getSExtValue();
             const SCEV *EP = SE->getSCEVAtScope(E, L->getParentLoop());
             if (isa<SCEVConstant>(EP)){
               const SCEVConstant *EPP = dyn_cast<SCEVConstant>(EP);
-              end_value = EPP->getValue()->getZExtValue();
+              end_value = EPP->getValue()->getSExtValue();
               end_value_str = std::to_string(end_value);
             } else{
               end_value_str = "u"; // u as an unknown variable. Maybe it should be infinity instead? 
