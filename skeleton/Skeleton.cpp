@@ -19,7 +19,7 @@
 
 using namespace llvm;
 
-static cl::opt<std::string> OutputFilename("ilpoutput", cl::desc("Output .ilp filename"), cl::value_desc("filename"));
+static cl::opt<std::string> OutputFilename("ilpoutput", cl::desc("Output .ilp filename"), cl::value_desc("filename"), cl::Required);
 
 namespace {
   struct A3 : public FunctionPass {
@@ -67,7 +67,7 @@ namespace {
         const SCEVConstant *CE = dyn_cast<SCEVConstant>(AE->getOperand(0));
         lsso << CE->getValue()->getSExtValue();
       } else{
-        lower.clear(); // u as an unknown variable. Maybe it should be infinity instead?
+        lower.clear(); // lower bound is Unknown
       }
 
       const SCEV *EP = SE->getSCEVAtScope(IV, IV->getLoop()->getParentLoop());
@@ -75,7 +75,7 @@ namespace {
         const SCEVConstant *EPP = dyn_cast<SCEVConstant>(EP);
         usso << EPP->getValue()->getSExtValue() - 1;
       } else{
-        upper.clear(); // u as an unknown variable. Maybe it should be infinity instead? 
+        upper.clear(); // upper bound is Unknown
       }
     }
 
