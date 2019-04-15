@@ -477,6 +477,6 @@ namespace {
 }
 
 char A3::ID = 0;
-static RegisterPass<A3> X("a3", "Induction Variable Pass",
+static RegisterPass<A3> X("ilpdep", "Induction Variable Pass",
 							false /* Only looks at CFG */,
 							false /* Analysis Pass */);
