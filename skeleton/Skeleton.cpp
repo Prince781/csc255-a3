@@ -65,13 +65,29 @@ namespace {
             if (E){
               int64_t start_value = 0;
               int64_t end_value = 0;
+              std::string start_value_str, end_value_str;
               if (isa<SCEVNAryExpr>(E)){
                 const SCEVNAryExpr *AE = dyn_cast<SCEVNAryExpr>(E);
-                const SCEVConstant *CE = dyn_cast<SCEVConstant>(AE->getOperand(0));
-                start_value = CE->getValue()->getZExtValue();
+                if (isa<SCEVConstant>(AE->getOperand(0))){
+                  const SCEVConstant *CE = dyn_cast<SCEVConstant>(AE->getOperand(0));
+                  start_value = CE->getValue()->getZExtValue();
+                  start_value_str = std::to_string(start_value);
+                } else{
+                  start_value_str = "u"; // u as an unknown variable. Maybe it should be infinity instead?
+                }
+                
               }
-              const SCEVConstant *EP = dyn_cast<SCEVConstant>(SE->getSCEVAtScope(E, L->getParentLoop()));
-              end_value = EP->getValue()->getZExtValue();
+              // const SCEVConstant *EP = dyn_cast<SCEVConstant>(SE->getSCEVAtScope(E, L->getParentLoop()));
+              // end_value = EP->getValue()->getZExtValue();
+              const SCEV *EP = SE->getSCEVAtScope(E, L->getParentLoop());
+              if (isa<SCEVConstant>(EP)){
+                const SCEVConstant *EPP = dyn_cast<SCEVConstant>(EP);
+                end_value = EPP->getValue()->getZExtValue();
+                end_value_str = std::to_string(end_value);
+              } else{
+                end_value_str = "u"; // u as an unknown variable. Maybe it should be infinity instead? 
+              }
+              
               EP->print(errs());
               errs() << "\r\n";
               errs() << "Start value: " << start_value << "\r\n";
