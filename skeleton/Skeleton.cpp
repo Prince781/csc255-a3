@@ -461,6 +461,12 @@ namespace {
               }
 
               getGEPs(I, geps_list, seen); // get all getelementptr instructions that this instruction depends on
+              for (GetElementPtrInst *gep : geps_list){
+                if (!isa<GetElementPtrInst>(gep->getOperand(0))){
+                  base = SE.getSCEV(gep->getOperand(0));
+                  break;
+                }
+              }
               if (base_map.find(base) == base_map.end())
                 base_map[base] = std::list<ArrayAccess>();
               
@@ -481,6 +487,8 @@ namespace {
 
         for (auto pair : base_map) {
           // for debugging purposes
+          pair.first->print(errs());
+          errs() << ": \r\n";
           for (auto it = pair.second.begin(); it != pair.second.end(); it++) {
             errs() << "instruction: ";
             it->I->print(errs());
