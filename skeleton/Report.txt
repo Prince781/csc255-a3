@@ -29,3 +29,5 @@ Yufei Du
     - opt OPTARGS -load=libilpdep.so -ilpdep -ilpoutput=output.ilp input.c
 
 - Other notes and comments
+    - For programs with multiple functions, our pass will write ILP for loops in all functions to the same specified
+        output file. To separate each function, the pass will write a comment with function name before ILP for that function. 
