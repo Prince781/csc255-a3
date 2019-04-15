@@ -13,6 +13,7 @@ Yufei Du
     - CMakeLists.txt: CMake file to generate Makefile
     - test/test.c: testing c source file that came with the skeleton code
     - test/level*.c: additional custom level-N loops test cases we made
+    - test/nonaffine3.c: additional custom test case with non-affine index function
     - test/Makefile: Makefile to compile test.c. We modified it so that it will run all test files. It will also generate .ll file for
                     human-readable LLVM IR. 
     - OPTARGS: Arguments to pass in to opt
@@ -33,3 +34,4 @@ Yufei Du
 - Other notes and comments
     - For programs with multiple functions, our pass will write ILP for loops in all functions to the same specified
         output file. To separate each function, the pass will write a comment with function name before ILP for that function. 
+    - If any of the index function is not affine, the pass will simply ignore this index function and continue. 
