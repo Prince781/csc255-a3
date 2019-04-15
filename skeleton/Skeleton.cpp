@@ -399,9 +399,12 @@ namespace {
       std::list<Coeff> coeffs;
       const SCEVConstant *cnst;
 
-      std::string to_string(std::map<const SCEV *, PHINode *> &iv_map) const {
+      std::string to_string(std::map<const SCEV *, PHINode *> &iv_map, std::string post = "") const {
         std::string s;
         raw_string_ostream stream(s);
+
+        if (!post.empty())
+          post = "_" + post;
 
         bool first = true;
         for (auto coeff : coeffs) {
@@ -412,7 +415,7 @@ namespace {
           else
             first = false;
           coeff.coeff->print(stream);
-          stream << " " << iv_map[coeff.indvar]->getName();
+          stream << " " << iv_map[coeff.indvar]->getName() << post;
         }
 
         if (cnst) {
@@ -496,14 +499,29 @@ namespace {
             errs() << "\r\n";
           }
 
-          /*
+          errs() << "writing to ... " << OutputFilename << " for all references to " << pair.first << "\r\n";
+
+          // time to print the ILP
+          std::ofstream ilp_file(OutputFilename, std::ofstream::app);
           for (auto it = pair.second.begin(); it != pair.second.end(); it++) {
             for (auto it2 = std::next(it); it2 != pair.second.end(); it2++) {
               if (!(isa<StoreInst>(it->I) || isa<StoreInst>(it2->I)))
                 continue;
+              auto fidx_it = it->idxs.begin();    // f_i()
+              auto gidx_it = it2->idxs.begin();   // g_i()
+
+              // TODO: write max ... at head
+
+              for (; fidx_it != it->idxs.end() && gidx_it != it2->idxs.end(); fidx_it++,gidx_it++) {
+                ilp_file << fidx_it->to_string(iv_map, "a") << " = " << gidx_it->to_string(iv_map, "B") << ";\n";
+              }
+
+              assert(fidx_it == it->idxs.end() && "references to same memory location have different number of index functions");
+              assert(gidx_it == it2->idxs.end() && "references to same memory location have different number of index functions");
+
+              // TODO: write constraints on index variables
             }
           }
-          */
         }
       }
       return false;
