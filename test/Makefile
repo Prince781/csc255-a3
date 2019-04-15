@@ -15,7 +15,7 @@ DIS= $(LLVM_BIN_DIR)/llvm-dis
 
 all: check
 
-check: test.bc.opt level2.bc.opt level3.bc.opt level4.bc.opt
+check: test.bc.opt level2.bc.opt level3.bc.opt level4.bc.opt nonaffine3.bc.opt
 
 %.bc.opt: %.bc $(LEVEL)/build/skeleton/libilpdep.so
 	$(OPT) -load $(LEVEL)/build/skeleton/libilpdep.so $(shell cat $(LEVEL)/OPTARGS) -ilpdep -ilpoutput=output.ilp --debug-pass=Structure < $< > $@

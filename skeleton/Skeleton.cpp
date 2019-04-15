@@ -246,7 +246,7 @@ namespace {
       return false;
     }
 
-    void compareToIndVars(const SCEV *offset, ScalarEvolution *SE, std::list<Coeff> &coeffs, const SCEVConstant *&cnst, 
+    bool compareToIndVars(const SCEV *offset, ScalarEvolution *SE, std::list<Coeff> &coeffs, const SCEVConstant *&cnst, 
       std::map<const SCEV *, PHINode *> &ivars_map) {
       while (isa<SCEVAddRecExpr>(offset)) {
         const SCEVAddRecExpr *RE = dyn_cast<SCEVAddRecExpr>(offset);
@@ -262,7 +262,11 @@ namespace {
         factor->print(errs());
         errs() << "\r\n";
 
-        assert(isa<SCEVConstant>(factor) && "factor is not a constant");
+        // not affine; abort
+        if (!isa<SCEVConstant>(factor)) {
+          coeffs.clear();
+          return false;
+        }
         coeffs.push_back(Coeff { dyn_cast<SCEV>(IV), dyn_cast<SCEVConstant>(factor) });
 
         // (3) peel off a layer
@@ -281,6 +285,7 @@ namespace {
 
 
       printIndexFunction(coeffs, cnst, ivars_map);
+      return true;
     }
 
     void printIndexFunction(std::list<Coeff> &coeffs, const SCEVConstant *scnst, std::map<const SCEV *, PHINode *> &ivars_map) {
@@ -391,16 +396,25 @@ namespace {
                 base_map[base] = std::list<ArrayAccess>();
               
               ArrayAccess aa = { .I = I };
+              bool isAffine = true;
               for (GetElementPtrInst *gep : geps_list) {
                 // get an equation for each getelementptr instruction (index)
                 const SCEV *scev = getGEPThirdArg(gep, &SE);
                 std::list<Coeff> expr_coeffs;
                 const SCEVConstant *expr_const = nullptr;
-                compareToIndVars(scev, &SE, expr_coeffs, expr_const, iv_map);
+                if (!(isAffine = compareToIndVars(scev, &SE, expr_coeffs, expr_const, iv_map)))
+                  break;
                 aa.idxs.push_back(Equation { expr_coeffs, expr_const });
               }
 
-              base_map[base].push_back(aa);
+              if (isAffine)
+                base_map[base].push_back(aa);
+              else
+              {
+                errs() << "ignoring ";
+                I->print(errs());
+                errs() << " because not all of its index functions are affine\r\n";
+              }
             }
           }
         }
