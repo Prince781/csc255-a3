@@ -15,6 +15,7 @@
 #include <fstream>
 #include <string>
 #include <map>
+#include <regex>
 
 using namespace llvm;
 
@@ -57,7 +58,7 @@ namespace {
       return nullptr;
     }
 
-    // get the range of an induction variable
+    /// get the range of an induction variable (inclusive lower and upper bound)
     void IVgetRange(const SCEVAddRecExpr *IV, ScalarEvolution *SE, std::string &lower, std::string &upper) {
       const SCEVNAryExpr *AE = dyn_cast<SCEVNAryExpr>(IV);
       raw_string_ostream lsso(lower), usso(upper);
@@ -72,7 +73,7 @@ namespace {
       const SCEV *EP = SE->getSCEVAtScope(IV, IV->getLoop()->getParentLoop());
       if (isa<SCEVConstant>(EP)){
         const SCEVConstant *EPP = dyn_cast<SCEVConstant>(EP);
-        usso << EPP->getValue()->getSExtValue();
+        usso << EPP->getValue()->getSExtValue() - 1;
       } else{
         usso << "u"; // u as an unknown variable. Maybe it should be infinity instead? 
       }
@@ -300,6 +301,10 @@ namespace {
       errs() << "\r\n";
     }
 
+    static std::string glpsolName(const std::string s) {
+      return std::regex_replace(s, std::regex("[.]"), "_");
+    }
+
     struct Equation {
       std::list<Coeff> coeffs;
       const SCEVConstant *cnst;
@@ -325,7 +330,7 @@ namespace {
           coeff.coeff->print(stream);
           iname_stream << iv_map[coeff.indvar]->getName() << post;
           iname_stream.flush();
-          stream << "*" << iname;
+          stream << "*" << glpsolName(iname);
           ivars_instanced[iname] = coeff.indvar;
         }
 
@@ -404,6 +409,9 @@ namespace {
         // for example, if the induction variable is "indvar.iv",
         // then a possible instance of it would be "indvar.iv_a"
         std::map<std::string, const SCEV *> ivars_instanced;
+        std::string eqns;
+        raw_string_ostream eqns_s(eqns);
+        size_t neqns = 0;
         for (auto pair : base_map) {
           // for debugging purposes
           pair.first->print(errs());
@@ -426,8 +434,6 @@ namespace {
           errs() << "writing to ... " << OutputFilename << " for all references to " << pair.first << "\r\n";
 
           // time to print the ILP
-          std::string eqns;
-          raw_string_ostream eqns_s(eqns);
           for (auto it = pair.second.begin(); it != pair.second.end(); it++) {
             for (auto it2 = std::next(it); it2 != pair.second.end(); it2++) {
               if (!(isa<StoreInst>(it->I) || isa<StoreInst>(it2->I)))
@@ -436,8 +442,9 @@ namespace {
               auto gidx_it = it2->idxs.begin();   // g_i()
 
               for (; fidx_it != it->idxs.end() && gidx_it != it2->idxs.end(); fidx_it++,gidx_it++) {
-                eqns_s << fidx_it->to_string(iv_map, "a", ivars_instanced) 
+                eqns_s << "s.t. eqn" << neqns << ": " << fidx_it->to_string(iv_map, "a", ivars_instanced) 
                 << " = " << gidx_it->to_string(iv_map, "B", ivars_instanced) << ";\n";
+                neqns++;
               }
 
               assert(fidx_it == it->idxs.end() && "references to same memory location have different number of index functions");
@@ -445,10 +452,6 @@ namespace {
             }
           }
           eqns_s.flush();
-
-          auto fpair = &*ivars_instanced.begin();
-          ilp_file << "max: " << fpair->first << ";" << std::endl;
-          ilp_file << eqns;
         }
 
         // print ranges for induction variables
@@ -456,10 +459,29 @@ namespace {
           std::string lower, upper;
           assert(isa<SCEVAddRecExpr>(pair.second) && "induction variable is not a SCEVAddRecExpr");
           IVgetRange(dyn_cast<SCEVAddRecExpr>(pair.second), &SE, lower, upper);
-
-          ilp_file << pair.first << " >= " << lower << ";" << std::endl;
-          ilp_file << pair.first << " < " << upper << ";\n" << std::endl;
+          ilp_file << "var " << glpsolName(pair.first) << " >= " << lower << " <= " << upper << " integer;" << std::endl;
         }
+
+        // just pick some variable to maximize; we only care whether a solution exists
+        if (ivars_instanced.empty())
+          continue;
+        else
+          ilp_file << std::endl;
+
+        auto fpair = &*ivars_instanced.begin();
+        ilp_file << "maximize keks: " << glpsolName(fpair->first) << ";" << std::endl << std::endl;
+        ilp_file << eqns << std::endl;
+        ilp_file << "solve;" << std::endl << std::endl;
+        ilp_file << "display ";
+        bool first = true;
+        for (auto pair : ivars_instanced) {
+          if (!first)
+            ilp_file << ", ";
+          else first = false;
+          ilp_file << glpsolName(pair.first);
+        }
+        ilp_file << ";" << std::endl << std::endl;
+        ilp_file << "end;" << std::endl;
       }
       return false;
     }
