@@ -10,6 +10,7 @@
 #include "llvm/Analysis/ScalarEvolutionExpander.h"
 #include "llvm/Transforms/Scalar/IndVarSimplify.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/raw_ostream.h"
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -277,13 +278,9 @@ namespace {
       errs() << "\r\n";
     }
 
-    bool runOnFunction(Function &F) override {
-      DominatorTree DT(F);
-      LoopInfo LI(DT);
-      AssumptionCache AC(F);
-      TargetLibraryInfoImpl TLII;
-      TargetLibraryInfo TLI(TLII);
-      ScalarEvolution SE(F, TLI, AC, DT, LI);
+    bool runOnFunction2(Function &F) {
+      LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
+      ScalarEvolution &SE = getAnalysis<ScalarEvolutionWrapperPass>().getSE();
 
       errs() << "In function " << (std::string) F.getName() << "...\n";
 
@@ -394,6 +391,120 @@ namespace {
       if (Output.good()){
         Output << "Placeholder for ilp";
         Output.close();
+      }
+      return false;
+    }
+
+    struct Equation {
+      std::list<Coeff> coeffs;
+      const SCEVConstant *cnst;
+
+      std::string to_string(std::map<const SCEV *, PHINode *> &iv_map) const {
+        std::string s;
+        raw_string_ostream stream(s);
+
+        bool first = true;
+        for (auto coeff : coeffs) {
+          assert(iv_map.find(coeff.indvar) != iv_map.end() && "indvar SCEV doesn't map to an indvar");
+          assert(coeff.coeff && "coeff cannot be null");
+          if (!first)
+            stream << " + ";
+          else
+            first = false;
+          coeff.coeff->print(stream);
+          stream << " " << iv_map[coeff.indvar]->getName();
+        }
+
+        if (cnst) {
+          if (!first)
+            stream << " + ";
+          cnst->print(stream);
+        }
+
+        return s;
+      }
+    };
+
+    struct ArrayAccess {
+      Instruction *I;
+      std::list<Equation> idxs;
+    };
+
+    bool runOnFunction(Function &F) override {
+      LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
+      ScalarEvolution &SE = getAnalysis<ScalarEvolutionWrapperPass>().getSE();
+
+      // (1) for each loop L
+      // (2) populate SCEV -> IV map
+      // (3) for each instruction in the loop
+      // (4) if load/store, get base addr and save to ls_map
+
+      for (Loop *L : LI) {
+        std::map<const SCEV *, PHINode *> iv_map;
+        std::map<const SCEV *, std::list<ArrayAccess>> base_map;
+
+        printIVs(L, &SE, iv_map); // populate iv_map
+        for (Loop::block_iterator li = L->block_begin(); li != L->block_end(); ++li) {
+          BasicBlock *BB = *li;
+          for (BasicBlock::iterator bi = BB->begin(); bi != BB->end(); ++bi) {
+            Instruction *I = &*bi;
+
+            if (isa<LoadInst>(I) || isa<StoreInst>(I)) {
+              const SCEV *base = nullptr; // TODO: get base of load/store
+              SmallVector<GetElementPtrInst *, 4> geps_list;
+              std::set<Instruction *> seen;
+
+              if (isa<LoadInst>(I)) {
+                LoadInst *LI = dyn_cast<LoadInst>(I);
+              } else {
+                StoreInst *SI = dyn_cast<StoreInst>(I);
+              }
+
+              getGEPs(I, geps_list, seen); // get all getelementptr instructions that this instruction depends on
+              if (base_map.find(base) == base_map.end())
+                base_map[base] = std::list<ArrayAccess>();
+              
+              ArrayAccess aa = { .I = I };
+              for (GetElementPtrInst *gep : geps_list) {
+                // get an equation for each getelementptr instruction (index)
+                const SCEV *scev = getGEPThirdArg(gep, &SE);
+                std::list<Coeff> expr_coeffs;
+                const SCEVConstant *expr_const = nullptr;
+                compareToIndVars(scev, &SE, expr_coeffs, expr_const, iv_map);
+                aa.idxs.push_back(Equation { expr_coeffs, expr_const });
+              }
+
+              base_map[base].push_back(aa);
+            }
+          }
+        }
+
+        for (auto pair : base_map) {
+          // for debugging purposes
+          for (auto it = pair.second.begin(); it != pair.second.end(); it++) {
+            errs() << "instruction: ";
+            it->I->print(errs());
+            errs() << "\r\nhas these index functions: ";
+            bool first = true;
+            for (auto eq : it->idxs) {
+              if (!first)
+                errs() << ", ";
+              else
+                first = false;
+              errs() << eq.to_string(iv_map);
+            }
+            errs() << "\r\n";
+          }
+
+          /*
+          for (auto it = pair.second.begin(); it != pair.second.end(); it++) {
+            for (auto it2 = std::next(it); it2 != pair.second.end(); it2++) {
+              if (!(isa<StoreInst>(it->I) || isa<StoreInst>(it2->I)))
+                continue;
+            }
+          }
+          */
+        }
       }
       return false;
     }
