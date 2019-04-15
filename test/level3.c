@@ -5,7 +5,7 @@ void foo() {
     for (int i = 7; i*i < 1000; ++i) {
         for (int j = 3; j*j < 500; ++j) {
             for (int k = 9; k*k < 1000; ++k) {
-                a[i][j][j + k] = 4;
+                a[i][j][2*j + k - 11 + 8] = 4;
                 sum += a[i][j-1][k+2];
             }
         }
